@@ -46,3 +46,18 @@ La puntuación debe expresar compatibilidad estimada, no probabilidad de contrat
 Tomar JobSync como referencia del flujo, JobSpy como posible conector y AI Resume Matcher como referencia conceptual del ranking. Construir sobre los módulos Python existentes en `jobbot/modelo.py` y `jobbot/geo.py`, después de revisar su comportamiento. Empezar con comparación de perfil y ofertas importadas; conectar búsquedas reales después.
 
 Pendiente para personalizar: CV o experiencia y habilidades, cargos objetivo, países o ciudades, modalidad e idiomas. Antes de reutilizar código, revisar la licencia del archivo y versión concretos.
+
+
+## Mejora del 5 de octubre de 2026
+
+Diagnóstico: había ofertas de LinkedIn guardadas clasificadas como empleo aunque fueran prácticas; las palabras del cargo se combinaban como condiciones obligatorias; el listado inicial de los portales peruanos cubría muy pocas convocatorias. Un cero visible no distinguía falta de resultados de exclusión por filtros.
+
+Fuentes técnicas revisadas:
+
+- [JobSpy, documentación y código](https://github.com/speedyapply/JobSpy): `fetch_description` reemplaza el parámetro antiguo `linkedin_fetch_description`; la consulta usa cargo y ubicación y puede sufrir límites de la fuente. Se verificó además la firma de la versión instalada.
+- [ConFit: Improving Resume-Job Matching using Data Augmentation and Contrastive Learning](https://arxiv.org/abs/2401.16349): investigación específica de ranking CV–empleo que motiva distinguir el problema de relevancia del simple conteo de palabras. No se implementó ni se entrenó ConFit en esta app.
+- [A Contextual-Bandit Approach to Personalized News Article Recommendation](https://arxiv.org/abs/1003.0146): estudia adaptación al contenido y al feedback. Su aplicación a preferencias de empleo es una decisión de diseño de este proyecto; no se trasladan sus resultados ni se implementa LinUCB.
+
+Implementación elegida: reglas explícitas para perfil y requisitos, afinidad por palabras y grupos de áreas, y una regresión logística local entrenada únicamente con valoraciones del usuario. El componente aprendido modifica moderadamente el orden y no supera una brecha detectada. No hay modelo semántico preentrenado, dataset de contratación ni precisión validada.
+
+Las valoraciones se guardan en el mismo archivo local ignorado por Git. Deshacer una valoración reconstruye el modelo sin esa etiqueta. El entrenamiento utiliza características del empleo, no atributos personales sensibles del candidato.

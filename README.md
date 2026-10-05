@@ -13,7 +13,7 @@ La idea es que puedas buscar según tus preferencias, ver cuánto tiempo lleva p
 - [LinkedIn](https://www.linkedin.com/jobs/): búsqueda pública mediante el conector [JobSpy](https://github.com/speedyapply/JobSpy).
 - Ofertas que añadas manualmente pegando su descripción y enlace.
 
-Los conectores peruanos revisan hasta **12 vacantes del listado principal por búsqueda**, siguiendo los enlaces a vacantes individuales cuando están disponibles. Esta versión no recorre todas las categorías ni todas las páginas de los portales.
+Los conectores peruanos revisan hasta **30 vacantes por búsqueda**, priorizando secciones relacionadas con la carrera o ubicación, siguiendo los enlaces a vacantes individuales cuando están disponibles. Esta versión no recorre todas las categorías ni todas las páginas de los portales.
 
 ## Qué puedes hacer
 
@@ -28,9 +28,17 @@ Los conectores peruanos revisan hasta **12 vacantes del listado principal por b�
 
 ## Cómo interpreta las ofertas
 
-La app busca coincidencias textuales entre las habilidades que declaraste y la descripción del puesto. Por ejemplo, si registras Excel y Python, muestra cuáles aparecen en el anuncio. El porcentaje representa la proporción de tus habilidades mencionadas: **no indica la probabilidad de contratación ni confirma que cumplas todos los requisitos**.
+El ranking combina las habilidades mencionadas, afinidad con cargos y áreas de interés, y requisitos explícitos detectados. Reconoce algunas equivalencias, como Excel y hojas de cálculo, o sistemas y soporte técnico. Estas equivalencias son reglas transparentes, no una comprensión semántica ilimitada.
 
-La carrera, los años de experiencia, los idiomas, el ciclo académico y los requisitos obligatorios se guardan o pueden revisarse en la descripción, pero aún no se validan automáticamente contra tu perfil.
+El perfil incluye situación académica, carrera, ciclo y meses de experiencia. Cuando la descripción indica experiencia general o un ciclo mínimo en un formato reconocido, muestra «compatible», «brecha» o «por confirmar», junto a la evidencia. La condición estudiante/egresado se contrasta con el nivel de prácticas. No verifica documentos, todas las carreras admitidas ni toda la experiencia específica. Un requisito desconocido nunca se considera cumplido. Las brechas detectadas limitan la puntuación, incluso si las habilidades coinciden.
+
+**Aprendizaje local:** los botones «Me interesa» y «No me interesa» entrenan una regresión logística de contenido con descenso de gradiente y regularización. El modelo usa palabras del título, descripción, tipo y modalidad para ajustar el orden de ofertas similares. La influencia comienza pequeña y aumenta con las valoraciones; puedes deshacer cada una. No hace falta una cuenta, una clave de IA ni enviar tu perfil a otro servicio. No se entrenó con un dataset externo y no hay una precisión validada sobre contratación.
+
+Los campos del perfil desconocidos no se redistribuyen como evidencia positiva: completar el perfil permite una comparación más informada. El índice de 0 a 100 expresa compatibilidad orientativa: **no es una probabilidad de contratación ni una certificación de cumplimiento**.
+
+Los filtros se calculan en un solo lugar. La interfaz informa cuántas ofertas de cada fuente están guardadas y visibles, y por qué se excluyen. Las alternativas fuera de tus filtros aparecen en una sección separada, señalando la diferencia; no cambian tus preferencias.
+
+LinkedIn busca variantes más amplias del cargo, obtiene descripciones y reclasifica también las ofertas antiguas. «Practicante» sin nivel no se etiqueta como empleo: queda como prácticas de nivel por confirmar. «Lima» incluye varios distritos metropolitanos reconocidos; «Puno» no se convierte silenciosamente en Lima.
 
 Para las fechas, la app distingue la publicación, la primera detección y el cierre cuando esos datos están disponibles. Si una fuente no indica cuándo publicó la oferta, muestra una fecha desconocida; no utiliza el momento de detección como publicación. Calcula el vencimiento en la zona horaria de Lima y toma en cuenta la hora de cierre cuando consigue extraerla. Si solo hay una fecha de cierre, la considera hasta el final de ese día.
 
@@ -75,7 +83,7 @@ Esta versión ya permite consultar fuentes, importar ofertas, guardar preferenci
 
 - Ampliar la búsqueda a más páginas y categorías de los portales peruanos.
 - Importar un CV en PDF o Word y permitir corregir los datos extraídos.
-- Comparar requisitos obligatorios y deseables con evidencia de experiencia, formación y habilidades.
+- Ampliar la comparación de requisitos obligatorios y deseables, carreras e idiomas con evidencia verificable.
 - Mejorar la extracción de sueldo, modalidad y fechas en distintos formatos.
 - Leer las bases y cronogramas de las convocatorias cuando sean necesarios.
 
@@ -89,10 +97,10 @@ Python, Requests, HTMLParser y una interfaz en HTML, CSS y JavaScript. LinkedIn 
 python -m unittest discover -s tests
 ```
 
-Las pruebas cubren fechas peruanas, vencimiento por día y hora, fechas desconocidas, extracción de sueldo, exclusión de texto relacionado y coincidencias de habilidades sin confundir subcadenas.
+Las pruebas cubren fechas y plazos, extracción, clasificación de prácticas, filtros por localidad y datos desconocidos, brechas de perfil y aprendizaje reversible a partir de valoraciones. Las consultas reales a fuentes son comprobaciones manuales separadas de esas pruebas.
 
 ## Referencias del proyecto
 
-La investigación inicial está en [REFERENCIAS.md](REFERENCIAS.md). Tomamos como referencias conceptuales los flujos de JobSync, el conector JobSpy y los enfoques de Resume Matcher y AI Resume Matcher. El código de la app local se desarrolló en este proyecto; las referencias no implican que todas sus funciones estén implementadas aquí.
+La investigación y las fuentes técnicas están en [REFERENCIAS.md](REFERENCIAS.md). Tomamos como referencias conceptuales los flujos de JobSync, el conector JobSpy y los enfoques de Resume Matcher y AI Resume Matcher. El código de la app local se desarrolló en este proyecto; las referencias no implican que todas sus funciones estén implementadas aquí.
 
 **Palabras clave:** buscador de empleo Perú, prácticas profesionales, prácticas preprofesionales, Peru job finder, job search, LinkedIn, resume matching, Python.

@@ -119,7 +119,7 @@ def detalle(url, fuente, titulo=''):
     address=loc.get('address',{}) if isinstance(loc,dict) else {}
     ubicacion=address.get('addressLocality','') if isinstance(address,dict) else ''
     def campo(label):
-        m=re.search(label+r'\s*:?\s*([^\n]{1,300})',raw,re.I)
+        m=re.search(r'(?:^|\n)\s*'+label+r'\s*:\s*([^\n]{1,300})',raw,re.I)
         return m[1].strip() if m else ''
     descripcion=jd.get('description') or raw
     descripcion=Pagina(descripcion).texto if '<' in descripcion else descripcion
@@ -134,15 +134,26 @@ def detalle(url, fuente, titulo=''):
     amount=re.search(r'S\s*/\.?\s*([\d,]+(?:\.\d{1,2})?)',salary)
     salario=float(amount[1].replace(',','')) if amount else None
     return {'id':hashlib.sha256(url.encode()).hexdigest()[:16], 'fuente':fuente,'url':url,'titulo':titulo,
-        'empresa':(org.get('name','') if isinstance(org,dict) else '') or campo('Organización'), 'ubicacion':ubicacion or campo('Lugar de (?:trabajo|prácticas|prestación del servicio)'),
+        'empresa':(org.get('name','') if isinstance(org,dict) else '') or campo('Organización') or (p.h1.split('Convocatoria')[0].strip() if 'Convocatoria' in p.h1 else ''), 'ubicacion':ubicacion or campo('Lugar de (?:trabajo|prácticas|prestación del servicio)'),
         'descripcion':descripcion[:20000], 'publicado':publicado, 'cierre':cierre,
         'detectado':datetime.now(LIMA).isoformat(),'revisado':datetime.now(LIMA).isoformat(), 'modalidad':'remoto' if re.search(r'(?:modalidad|trabajo|practicas)\s+(?:de\s+trabajo\s+)?(?:remot[oa]|virtual)|\bremote\b',n) else 'hibrido' if 'hibrid' in n else 'presencial' if 'presencial' in n else '',
         'tipo':'preprofesional' if 'preprofesional' in n or 'pre profesional' in n else 'profesional' if fuente=='practicas' else 'empleo',
         'salario':salario,'moneda':'PEN','periodo':'mensual', 'cerrada':bool(re.search(r'\b(?:Concluido|Convocatoria finalizada)\b',descripcion,re.I))}
 
-def buscar_fuente(fuente, termino):
+def buscar_fuente(fuente, termino, ubicacion="", limite=30):
     p=leer(FUENTES[fuente]); links={}
+    # Priorizar secciones observadas de carrera y ubicación, sin inventar direcciones.
+    pages=[p]; wanted=palabras(texto_busqueda(termino))|palabras(ubicacion)
+    categories=[]
     for href,title in p.enlaces:
+        u=urljoin(FUENTES[fuente],href)
+        if urlparse(u).hostname!=urlparse(FUENTES[fuente]).hostname: continue
+        if re.search(r'/(?:oferta-|convocatoria-|oportunidad-laboral-)',u): continue
+        if wanted and wanted & palabras(texto_busqueda(title+' '+u.replace('-',' '))): categories.append(u)
+    for u in list(dict.fromkeys(categories))[:2]:
+        try: pages.insert(0,leer(u))
+        except Exception: pass
+    for href,title in [link for page in pages for link in page.enlaces]:
         url=urljoin(FUENTES[fuente],href)
         if re.search(r'/(?:oferta-|convocatoria-|oportunidad-laboral-)',url) and urlparse(url).hostname==urlparse(FUENTES[fuente]).hostname:
             links.setdefault(url,title.strip())
@@ -150,7 +161,7 @@ def buscar_fuente(fuente, termino):
     # Los listados principales enlazan convocatorias agrupadas. Buscar sus vacantes individuales.
     direct=[(u,t) for u,t in candidates if '/oferta-convocatoria-' in u or '/oportunidad-laboral-' in u]
     if not direct:
-        for parent,title in candidates[:4]:
+        for parent,title in candidates[:8]:
             try:
                 group=leer(parent)
                 for href,t in group.enlaces:
@@ -158,38 +169,68 @@ def buscar_fuente(fuente, termino):
                     if re.search(r'/(?:oferta-|oportunidad-laboral-)',u) and urlparse(u).hostname==urlparse(parent).hostname:
                         if u not in dict(direct): direct.append((u,t.strip()))
             except Exception: pass
-            if len(direct)>=12: break
+            if len(direct)>=limite: break
     candidates=direct or candidates
     def get(item):
         try: return detalle(item[0],fuente,item[1]),None
         except Exception: return None,'No se pudo leer un detalle de '+fuente
-    with ThreadPoolExecutor(max_workers=2) as pool: result=list(pool.map(get,candidates[:12]))
+    with ThreadPoolExecutor(max_workers=2) as pool: result=list(pool.map(get,candidates[:limite]))
     words=palabras(texto_busqueda(termino))
-    jobs=[j for j,e in result if j and all(w in texto_busqueda(j['titulo']+' '+j['descripcion']) for w in words)]
+    jobs=[j for j,e in result if j]
     errors=list(dict.fromkeys(e for j,e in result if e))
-    if len(candidates)>12: errors.append(f'{fuente}: revisión limitada a 12 anuncios del listado principal; no es una búsqueda completa del portal.')
+    errors.append(f'{fuente}: {len(jobs)} vacantes leídas, con límite de {limite}. Se revisan secciones relacionadas; la cobertura no es exhaustiva.')
     return jobs,errors
 
-def buscar_linkedin(termino, ubicacion):
-    try: from jobspy import scrape_jobs
-    except ImportError: return [],['LinkedIn: falta instalar el conector opcional python-jobspy. Puedes importar una oferta por su descripción.']
-    df=scrape_jobs(site_name=['linkedin'],search_term=termino or 'practicante',location=ubicacion or 'Peru',results_wanted=15,linkedin_fetch_description=True)
-    jobs=[]
-    for record in json.loads(df.to_json(orient='records',date_format='iso')):
-        url=record.get('job_url') or ''
-        jobs.append({'id':hashlib.sha256(url.encode()).hexdigest()[:16],'fuente':'linkedin','url':url,'titulo':record.get('title') or '',
-            'empresa':record.get('company') or '', 'descripcion':record.get('description') or '', 'ubicacion':record.get('location') or '',
-            'modalidad':'remoto' if record.get('is_remote') else '', 'tipo':'preprofesional' if 'preprofesional' in normalizar(record.get('title')) else 'profesional' if 'practicante profesional' in normalizar(record.get('title')) else 'empleo', 'publicado':fecha_iso(record.get('date_posted')),
-            'cierre':None,'detectado':datetime.now(LIMA).isoformat(),'cerrada':False,'salario':record.get('min_amount'), 'moneda':record.get('currency') or '', 'periodo':record.get('interval') or ''})
-    return jobs,[]
+def buscar_linkedin(termino, ubicacion, tipo='', limite=30):
+    try:
+        from jobspy import scrape_jobs
+    except ImportError:
+        return [], ['LinkedIn: el conector no está instalado. Instala requirements-linkedin.txt.']
+    from .recomendacion import normalizar_oferta
+    target=texto_busqueda(termino).strip()
+    # Buscar el área, en vez de exigir un título literal que excluye puestos afines.
+    if 'sistemas' in target or 'informatica' in target: target='sistemas'
+    queries=[target or ('practicante' if 'profesional' in tipo or tipo=='practicas' else 'empleo')]
+    if tipo in ('preprofesional','profesional','practicas') and target:
+        queries=[f'practicante {target}',target]
+    location=(ubicacion.strip()+', Peru') if ubicacion and 'peru' not in normalizar(ubicacion) else ubicacion or 'Peru'
+    jobs={}; notes=[]
+    for query in queries[:2]:
+        if len(jobs)>=limite: break
+        try:
+            df=scrape_jobs(site_name=['linkedin'], search_term=query, location=location,
+                results_wanted=min(int(limite)-len(jobs),40), fetch_description=True,
+                job_type='internship' if tipo in ('preprofesional','profesional','practicas') else None,
+                verbose=0)
+            for record in json.loads(df.to_json(orient='records',date_format='iso')):
+                url=record.get('job_url') or ''
+                if not url: continue
+                is_remote=record.get('is_remote') is True
+                job={'id':hashlib.sha256(url.encode()).hexdigest()[:16], 'fuente':'linkedin','url':url,
+                    'titulo':record.get('title') or '', 'empresa':record.get('company') or '',
+                    'descripcion':record.get('description') or '', 'ubicacion':record.get('location') or '',
+                    'modalidad':'remoto' if is_remote else '', 'is_remote':is_remote,
+                    'job_type':record.get('job_type') or '', 'tipo':'empleo',
+                    'publicado':fecha_iso(record.get('date_posted')), 'cierre':None,
+                    'detectado':datetime.now(LIMA).isoformat(), 'revisado':datetime.now(LIMA).isoformat(),
+                    'cerrada':False,'salario':record.get('min_amount'), 'moneda':record.get('currency') or '',
+                    'periodo':record.get('interval') or ''}
+                jobs[job['id']]=normalizar_oferta(job)
+        except Exception:
+            notes.append('LinkedIn: no se pudo completar una consulta; puede haber un bloqueo o un problema de conexión.')
+    if not jobs:
+        notes.append(f'LinkedIn no devolvió anuncios para {target or "la consulta"} en {location}. Prueba otra ubicación o un cargo más amplio; no significa que no existan vacantes.')
+    return list(jobs.values())[:limite], list(dict.fromkeys(notes))
 
 def evaluar(oferta,perfil,ahora=None):
     ahora=ahora or datetime.now(LIMA)
     cierre=oferta.get('cierre')
     limite=None
     if cierre:
-        limite=datetime.combine(date.fromisoformat(cierre),time.max,LIMA) if len(cierre)==10 else datetime.fromisoformat(cierre)
-        if limite.tzinfo is None: limite=limite.replace(tzinfo=LIMA)
+        try:
+            limite=datetime.combine(date.fromisoformat(cierre),time.max,LIMA) if len(cierre)==10 else datetime.fromisoformat(cierre)
+            if limite.tzinfo is None: limite=limite.replace(tzinfo=LIMA)
+        except (ValueError,TypeError): limite=None
     estado='vencida' if limite and limite<ahora else 'cerrada' if oferta.get('cerrada') else 'en plazo' if limite else 'vigencia desconocida'
     pub=fecha_iso(oferta.get('publicado'))
     edad=max(0,(ahora-datetime.fromisoformat(pub)).total_seconds()/86400) if pub else None
